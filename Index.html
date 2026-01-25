@@ -1,0 +1,360 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart Equation Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            min-height: 100vh;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+            max-width: 900px;
+        }
+
+        canvas {
+            display: block;
+            margin: 20px auto;
+            background: #000;
+        }
+
+        .title {
+            color: #FF69B4;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px #FF1493;
+        }
+
+        .equation {
+            color: #FF69B4;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .k-value {
+            color: #FF1493;
+            font-size: 20px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        button {
+            background: linear-gradient(135deg, #FF1493, #FF69B4);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 20px rgba(255, 20, 147, 0.5);
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(255, 20, 147, 0.8);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .slider-container {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            width: 300px;
+            height: 6px;
+            background: linear-gradient(to right, #FF1493, #FF69B4);
+            outline: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #FF1493;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #FF1493;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #FF1493;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #FF1493;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">Heart Equation</div>
+        <div class="equation">y = |x|^(2/3) + 0.9·sin(kx)√(3-x²)</div>
+        <div class="k-value">k = <span id="k-display">0.00</span></div>
+        
+        <div class="controls">
+            <button id="playBtn">Play Animation</button>
+            <button id="resetBtn">Reset</button>
+        </div>
+
+        <div class="slider-container">
+            <label style="color: #FF69B4;">Manual Control:</label>
+            <input type="range" id="kSlider" min="0" max="50" step="0.1" value="0">
+        </div>
+
+        <canvas id="canvas" width="800" height="800"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const kDisplay = document.getElementById('k-display');
+        const playBtn = document.getElementById('playBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const kSlider = document.getElementById('kSlider');
+
+        let currentK = 0;
+        let animating = false;
+        let animationFrame = null;
+
+        // Center of canvas
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const scale = 100; // Increased from 80 to make heart wider
+
+        function drawAxes() {
+            ctx.strokeStyle = '#00BFFF';
+            ctx.lineWidth = 1;
+
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(50, centerY);
+            ctx.lineTo(750, centerY);
+            ctx.stroke();
+
+            // X-axis arrow
+            ctx.beginPath();
+            ctx.moveTo(750, centerY);
+            ctx.lineTo(740, centerY - 5);
+            ctx.moveTo(750, centerY);
+            ctx.lineTo(740, centerY + 5);
+            ctx.stroke();
+
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(centerX, 50);
+            ctx.lineTo(centerX, 750);
+            ctx.stroke();
+
+            // Y-axis arrow
+            ctx.beginPath();
+            ctx.moveTo(centerX, 50);
+            ctx.lineTo(centerX - 5, 60);
+            ctx.moveTo(centerX, 50);
+            ctx.lineTo(centerX + 5, 60);
+            ctx.stroke();
+
+            // Tick marks
+            for (let i = -3; i <= 3; i++) {
+                if (i !== 0) {
+                    // X-axis ticks
+                    ctx.beginPath();
+                    ctx.moveTo(centerX + i * 80, centerY - 5);
+                    ctx.lineTo(centerX + i * 80, centerY + 5);
+                    ctx.stroke();
+
+                    // Y-axis ticks
+                    ctx.beginPath();
+                    ctx.moveTo(centerX - 5, centerY - i * 80);
+                    ctx.lineTo(centerX + 5, centerY - i * 80);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function heartEquation(x, k) {
+            if (Math.abs(x) >= Math.sqrt(3)) {
+                return null;
+            }
+
+            try {
+                const part1 = Math.pow(Math.abs(x), 2/3);
+                const part2 = 0.9 * Math.sin(k * x) * Math.sqrt(3 - x * x);
+                return part1 + part2;
+            } catch {
+                return null;
+            }
+        }
+
+        function drawHeart(k) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawAxes();
+
+            const numPoints = 800;
+            const xMin = -Math.sqrt(3);
+            const xMax = Math.sqrt(3);
+            const points = [];
+
+            // Generate points
+            for (let i = 0; i < numPoints; i++) {
+                const x = xMin + (xMax - xMin) * i / (numPoints - 1);
+                const y = heartEquation(x, k);
+
+                if (y !== null) {
+                    points.push({
+                        x: centerX + x * scale,
+                        y: centerY - y * scale
+                    });
+                }
+            }
+
+            if (points.length === 0) return;
+
+            // Draw glow layers (thinner lines)
+            const glowColors = ['#FFB6C1', '#FF69B4', '#FF1493'];
+            const glowWidths = [3, 2, 1.5]; // Reduced from [6, 4, 2]
+
+            for (let i = 0; i < glowColors.length; i++) {
+                ctx.strokeStyle = glowColors[i];
+                ctx.lineWidth = glowWidths[i];
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = glowColors[i];
+
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (const point of points) {
+                    ctx.lineTo(point.x, point.y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw main line (thinner)
+            ctx.strokeStyle = '#FF1493';
+            ctx.lineWidth = 1; // Reduced from 1.5
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#FF1493';
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (const point of points) {
+                ctx.lineTo(point.x, point.y);
+            }
+            ctx.stroke();
+
+            // Reset shadow
+            ctx.shadowBlur = 0;
+        }
+
+        function updateDisplay(k) {
+            kDisplay.textContent = k.toFixed(2);
+            drawHeart(k);
+        }
+
+        async function animate() {
+            if (animating) return;
+            
+            animating = true;
+            playBtn.textContent = 'Playing...';
+            playBtn.disabled = true;
+            kSlider.disabled = true;
+
+            // Stage 1: k = 0 (hold)
+            for (let i = 0; i < 15; i++) {
+                if (!animating) break;
+                updateDisplay(0);
+                await new Promise(resolve => setTimeout(resolve, 40));
+            }
+
+            // Stage 2: k = 0 to 3
+            for (let i = 1; i <= 30; i++) {
+                if (!animating) break;
+                currentK = i * 0.1;
+                updateDisplay(currentK);
+                kSlider.value = currentK;
+                await new Promise(resolve => setTimeout(resolve, 40));
+            }
+
+            // Stage 3: k = 3 to 10.75
+            for (let i = 1; i <= 31; i++) {
+                if (!animating) break;
+                currentK = 3 + i * 0.25;
+                updateDisplay(currentK);
+                kSlider.value = currentK;
+                await new Promise(resolve => setTimeout(resolve, 40));
+            }
+
+            // Stage 4: k = 10.75 to 50
+            for (let i = 1; i <= 39; i++) {
+                if (!animating) break;
+                currentK = 10.75 + i * 1.0;
+                updateDisplay(currentK);
+                kSlider.value = currentK;
+                await new Promise(resolve => setTimeout(resolve, 40));
+            }
+
+            animating = false;
+            playBtn.textContent = 'Play Animation';
+            playBtn.disabled = false;
+            kSlider.disabled = false;
+        }
+
+        function reset() {
+            animating = false;
+            currentK = 0;
+            kSlider.value = 0;
+            updateDisplay(0);
+            playBtn.textContent = 'Play Animation';
+            playBtn.disabled = false;
+            kSlider.disabled = false;
+        }
+
+        // Event listeners
+        playBtn.addEventListener('click', animate);
+        resetBtn.addEventListener('click', reset);
+        kSlider.addEventListener('input', (e) => {
+            currentK = parseFloat(e.target.value);
+            updateDisplay(currentK);
+        });
+
+        // Initial draw
+        drawHeart(0);
+    </script>
+</body>
+</html>
